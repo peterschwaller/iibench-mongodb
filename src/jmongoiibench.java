@@ -27,6 +27,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class jmongoiibench {
     public static AtomicLong globalInserts = new AtomicLong(0);
+    public static AtomicLong globalItemCount = new AtomicLong(0);
     public static AtomicLong globalWriterThreads = new AtomicLong(0);
     public static AtomicLong globalQueryThreads = new AtomicLong(0);
     public static AtomicLong globalQueriesExecuted = new AtomicLong(0);
@@ -282,8 +283,12 @@ public class jmongoiibench {
                 coll.ensureIndex(new BasicDBObject("cashregisterid", 1).append("price", 1).append("customerid", 1), idxOptions);
             }
             if (numSecondaryIndexes >= 3) {
-                logMe(" *** creating secondary index on price + dateandtime + customerid");
-                coll.ensureIndex(new BasicDBObject("price", 1).append("dateandtime", 1).append("customerid", 1), idxOptions);
+                // logMe(" *** creating secondary index on price + dateandtime + customerid");
+                // coll.ensureIndex(new BasicDBObject("price", 1).append("dateandtime", 1).append("customerid", 1), idxOptions);
+
+                logMe(" *** creating secondary index on dateandtime TTL");
+		        idxOptions.put("expireAfterSeconds", 60);
+                coll.ensureIndex(new BasicDBObject("dateandtime", 1), idxOptions);
             }
             // END: create the collection
         }
@@ -414,7 +419,8 @@ public class jmongoiibench {
                         double thisPrice= ((rand.nextDouble() * maxPrice) + (double) thisCustomerId) / 100.0;
                         BasicDBObject doc = new BasicDBObject();
                         //doc.put("_id",id);
-                        doc.put("dateandtime", System.currentTimeMillis());
+                        //doc.put("dateandtime", System.currentTimeMillis());
+			            doc.put("dateandtime", new Date());
                         doc.put("cashregisterid", rand.nextInt(numCashRegisters));
                         doc.put("customerid", thisCustomerId);
                         doc.put("productid", rand.nextInt(numProducts));
@@ -430,6 +436,7 @@ public class jmongoiibench {
                         coll.insert(aDocs);
                         numInserts += documentsPerInsert;
                         globalInserts.addAndGet(documentsPerInsert);
+                        globalItemCount.set(coll.count());
                         
                     } catch (Exception e) {
                         logMe("Writer thread %d : EXCEPTION",threadNumber);
@@ -723,6 +730,7 @@ public class jmongoiibench {
             long nextFeedbackMillis = t0 + (1000 * secondsPerFeedback * (intervalNumber + 1));
             long nextFeedbackInserts = lastInserts + insertsPerFeedback;
             long thisInserts = 0;
+            long thisItemCount = 0;
             long thisQueriesNum = 0;
             long thisQueriesMs = 0;
             long thisQueriesStarted = 0;
@@ -744,6 +752,7 @@ public class jmongoiibench {
                 }
                 
                 thisInserts = globalInserts.get();
+                thisItemCount = globalItemCount.get();
                 thisQueriesNum = globalQueriesExecuted.get();
                 thisQueriesMs = globalQueriesTimeMs.get();
                 thisQueriesStarted = globalQueriesStarted.get();
@@ -792,9 +801,9 @@ public class jmongoiibench {
                     
                     if (secondsPerFeedback > 0)
                     {
-                        logMe("%,d inserts : %,d seconds : cum ips=%,.2f : int ips=%,.2f : cum avg qry=%,.2f : int avg qry=%,.2f : cum avg qpm=%,.2f : int avg qpm=%,.2f : exceptions=%,d", thisInserts, elapsed / 1000l, thisInsertsPerSecond, thisIntervalInsertsPerSecond, thisQueryAvgMs, thisIntervalQueryAvgMs, thisAvgQPM, thisIntervalAvgQPM, thisInsertExceptions);
+                        logMe("%,d inserts : %,d items : %,d seconds : cum ips=%,.2f : int ips=%,.2f : cum avg qry=%,.2f : int avg qry=%,.2f : cum avg qpm=%,.2f : int avg qpm=%,.2f : exceptions=%,d", thisInserts, thisItemCount, elapsed / 1000l, thisInsertsPerSecond, thisIntervalInsertsPerSecond, thisQueryAvgMs, thisIntervalQueryAvgMs, thisAvgQPM, thisIntervalAvgQPM, thisInsertExceptions);
                     } else {
-                        logMe("%,d inserts : %,d seconds : cum ips=%,.2f : int ips=%,.2f : cum avg qry=%,.2f : int avg qry=%,.2f : cum avg qpm=%,.2f : int avg qpm=%,.2f : exceptions=%,d", intervalNumber * insertsPerFeedback, elapsed / 1000l, thisInsertsPerSecond, thisIntervalInsertsPerSecond, thisQueryAvgMs, thisIntervalQueryAvgMs, thisAvgQPM, thisIntervalAvgQPM, thisInsertExceptions);
+                        logMe("%,d inserts : %,d items : %,d seconds : cum ips=%,.2f : int ips=%,.2f : cum avg qry=%,.2f : int avg qry=%,.2f : cum avg qpm=%,.2f : int avg qpm=%,.2f : exceptions=%,d", intervalNumber * insertsPerFeedback, thisItemCount, elapsed / 1000l, thisInsertsPerSecond, thisIntervalInsertsPerSecond, thisQueryAvgMs, thisIntervalQueryAvgMs, thisAvgQPM, thisIntervalAvgQPM, thisInsertExceptions);
                     }
                     
                     try {
